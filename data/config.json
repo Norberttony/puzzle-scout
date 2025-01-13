@@ -1,0 +1,16 @@
+{
+    "games-path": "./data/games.pgn",
+    "results-path": "./data/results.json",
+    "debug-path": "./data/debug.txt",
+    
+    "shallow-search-depth-ply": 5,
+    "confirm-search-additional-ply": 3,
+    "blunder-magnitude": 700,
+    "winner-max": 200,
+    "max-solutions": 2,
+
+    "verify-path": "./data/puzzles.json",
+    "verify-report-path": "./data/verify.json",
+    "verify-search-ply": 6,
+    "verify-mistake-mag": 500
+}
