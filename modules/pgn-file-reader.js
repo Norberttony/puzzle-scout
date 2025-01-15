@@ -1,4 +1,10 @@
 
+const fs = require("fs");
+
+const { Board } = require("../game/game");
+const { Piece } = require("../game/piece");
+const { getMoveSAN } = require("../game/san");
+
 // splits the given string into each individual game.
 // returns an array of the individual games.
 function splitPGNs(pgnsString){
@@ -20,6 +26,56 @@ function splitPGNs(pgnsString){
             globalIdx = nextBrckt - 1;
         }
     }
+}
+
+// converts a specific kind of format used by the battle-ring. In this case, LAN files are sequences
+// of moves in LAN separated by line breaks.
+function convertLANToPGN(lanFilePath){
+    const lanFile = fs.readFileSync(lanFilePath).toString();
+    const lanMoves = lanFile.split("\n");
+
+    const board = new Board();
+    let pgn = "";
+
+    // interpret headers
+    while (lanMoves.length){
+        const hdr = lanMoves[0];
+        if (hdr.startsWith("White: ")){
+            pgn += `[White "${hdr.replace("White: ", "").trim()}]\n`;
+        }else if (hdr.startsWith("Black: ")){
+            pgn += `[Black "${hdr.replace("Black: ", "").trim()}"]\n`;
+        }else if (hdr.startsWith("FEN: ")){
+            const fen = hdr.replace("FEN: ", "").trim();
+            pgn += `[FEN "${fen}"]\n`;
+            board.loadFEN(fen);
+        }else{
+            break;
+        }
+        lanMoves.shift();
+    }
+
+    pgn += "\n";
+
+    // play out each move
+    let counter = board.fullmove;
+    if (board.turn == Piece.black){
+        pgn += `${counter++}... `;
+    }
+    for (const lan of lanMoves){
+        const move = board.getLANMove(lan);
+        if (move){
+            const san = getMoveSAN(board, move);
+            board.makeMove(move);
+
+            if (board.turn == Piece.black){
+                pgn += `${counter++}. ${san} `;
+            }else{
+                pgn += `${san} `;
+            }
+        }
+    }
+
+    return pgn.trim();
 }
 
 // returns a dictionary where keys are header names and values are header values.
@@ -69,4 +125,4 @@ function extractMoves(pgn){
     return pgn;
 }
 
-module.exports = { splitPGNs, extractHeaders, extractMoves };
+module.exports = { splitPGNs, extractHeaders, extractMoves, convertLANToPGN };
