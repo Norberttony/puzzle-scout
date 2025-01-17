@@ -127,7 +127,7 @@ fs.readFile(config["games-path"], async (err, data) => {
                         log(`Too many valid solutions (max is ${config["max-solutions"]}). Candidate rejected.`);
                     }else{
                         log("Puzzle added.");
-                        puzzlePotential.push({ fen, deepLog, shallowLog, prevEval, prevFEN, mistake: move.uci, otherMoves: multiAnswer });
+                        puzzlePotential.push({ id: gamesProcessed, fen, deepLog, shallowLog, prevEval, prevFEN, mistake: move.uci, otherMoves: multiAnswer });
                         fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
                     }
                 }

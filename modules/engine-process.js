@@ -114,7 +114,7 @@ async function getEvaluation(engine, fen, ply){
     const startIdx = engine.log.length;
 
     engine.write(`position fen ${fen}`);
-    await engine.prompt(`go depth ${ply}`, "bestmove", 100000);
+    await engine.prompt(`go depth ${ply}`, "bestmove", 1000000);
 
     // only consider what the engine put into its log after
     const tempLog = engine.log.substring(startIdx);
