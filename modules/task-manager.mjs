@@ -29,6 +29,11 @@ export class TaskManager {
         });
     }
 
+    terminate(){
+        for (const w of this.workers)
+            w.terminate();
+    }
+
     #freeWorker(worker){
         if (this.tasks.length == 0){
             this.freeWorkers.push(worker);
@@ -44,7 +49,7 @@ export class TaskManager {
             worker.off("message", message);
             worker.off("error", error);
             t.#freeWorker(worker);
-            res(e.data);
+            res(e);
         }
 
         function error(e){
@@ -55,7 +60,7 @@ export class TaskManager {
         }
 
         worker.on("message", message);
-        worker.on("error", error);
+        worker.on("messageerror", error);
         worker.postMessage(data);
     }
 }

@@ -33,11 +33,14 @@ fs.readFile(config["games-path"], async (err, data) => {
             .then((puzzles) => {
                 gamesProcessed++;
                 bar.progress = gamesProcessed / gamePGNs.length;
+                console.log(puzzles);
 
                 puzzlePotential.push(...puzzles);
                 fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
             });
     }
+
+    tm.terminate();
 });
 
 
