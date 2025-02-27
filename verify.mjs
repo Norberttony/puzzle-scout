@@ -1,11 +1,13 @@
 
-const fs = require("fs");
-const { Board } = require("./game/game");
-const { getEvaluation } = require("./modules/engine-process");
-const { extractEngines } = require("./modules/engine");
-const { log } = require("./modules/logger");
-const { ProgressBar } = require("./modules/progress-bar");
-const { config } = require("./modules/config");
+import fs from "fs";
+
+import { Board } from "./game/game.mjs";
+import { getEvaluation } from "./modules/engine-helpers.mjs";
+import { extractEngines } from "./modules/engine.mjs";
+import { log } from "./modules/logger.mjs";
+import { ProgressBar } from "./modules/progress-bar.mjs";
+import { config } from "./modules/config.mjs";
+
 
 const engineWrapper = extractEngines("./engine")[0];
 const bar = new ProgressBar("Verifying puzzles...");
@@ -62,10 +64,10 @@ async function verifyPuzzle(puzzle){
         otherSolutions[i] = [];
 
         board.makeMove(expectedMove);
-        const evalToBeat = await getEvaluation(engine, board.getFEN(), config["verify-search-ply"]);
+        const valToBeat = await getEvaluation(engine, board.getFEN(), config["verify-search-ply"]);
         board.unmakeMove(expectedMove);
 
-        log(`An equivalent solution to ${expectedMove.uci} will have an eval of ${evalToBeat}`);
+        log(`An equivalent solution to ${expectedMove.uci} will have an eval of ${valToBeat}`);
 
         const moves = board.generateMoves(true);
         log(`Must search through ${moves.length} moves.`);
@@ -75,13 +77,13 @@ async function verifyPuzzle(puzzle){
                 continue;
 
             board.makeMove(move);
-            const eval = await getEvaluation(engine, board.getFEN(), config["verify-search-ply"]);
+            const val = await getEvaluation(engine, board.getFEN(), config["verify-search-ply"]);
             board.unmakeMove(move);
 
-            log(`Evaluated ${move.uci} to be ${eval}`);
+            log(`Evaluated ${move.uci} to be ${val}`);
 
-            if (Math.sign(eval) == Math.sign(evalToBeat) && (Math.abs(eval - evalToBeat) <= config["verify-mistake-mag"] || Math.abs(eval) > Math.abs(evalToBeat))){
-                otherSolutions[i].push({ move: move.uci, eval });
+            if (Math.sign(val) == Math.sign(valToBeat) && (Math.abs(val - valToBeat) <= config["verify-mistake-mag"] || Math.abs(val) > Math.abs(valToBeat))){
+                otherSolutions[i].push({ move: move.uci, val });
                 log("Accepted as alternative solution");
             }
 

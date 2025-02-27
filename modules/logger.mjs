@@ -1,13 +1,13 @@
 
-const fs = require("fs");
-const { config } = require("./config");
+import fs from "fs";
+import { config } from "./config.mjs";
 
 
 function stringifyAndPadStart(val, maxLength, fillString){
     return (val + "").padStart(maxLength, fillString);
 }
 
-function log(msg){
+export function log(msg){
     const date = new Date();
 
     const month = date.getMonth() + 1;
@@ -23,5 +23,3 @@ function log(msg){
 
     fs.appendFileSync(config["debug-path"], `${dateStr} ${msg}\n`);
 }
-
-module.exports = { log };

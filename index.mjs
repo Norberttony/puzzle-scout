@@ -1,13 +1,13 @@
 
-const fs = require("fs");
+import fs from "fs";
 
-const { extractEngines } = require("./modules/engine");
-const { getEvaluation } = require("./modules/engine-process");
-const PGN_Handler = require("./modules/pgn-file-reader");
-const { Board } = require("./game/game");
-const { ProgressBar } = require("./modules/progress-bar");
-const { log } = require("./modules/logger");
-const { config } = require("./modules/config");
+import { extractEngines } from "./modules/engine.mjs";
+import { getEvaluation } from "./modules/engine-helpers.mjs";
+import * as PGN_Handler from "./modules/pgn-file-reader.mjs";
+import { Board } from "./game/game.mjs";
+import { ProgressBar } from "./modules/progress-bar.mjs";
+import { log } from "./modules/logger.mjs";
+import { config } from "./modules/config.mjs";
 
 
 const engineWrapper = extractEngines("./engine")[0];
@@ -30,7 +30,9 @@ fs.readFile(config["games-path"], async (err, data) => {
 
     const gameCount = gamePGNs.length;
     let gamesProcessed = 0;
-    const puzzlePotential = [];
+
+    // try to read from file first.
+    const puzzlePotential = fs.existsSync(config["results-path"]) ? JSON.parse(fs.readFileSync(config["results-path"]).toString()) : [];
 
     for (const pgn of gamePGNs){
         log(`Processing game ${gamesProcessed}`);
@@ -66,6 +68,7 @@ fs.readFile(config["games-path"], async (err, data) => {
             if (move){
                 moves.push(move);
                 board.makeMove(move);
+                move.san = m;
             }
         }
 
@@ -78,7 +81,7 @@ fs.readFile(config["games-path"], async (err, data) => {
 
         // go through game and find blunders.
         tempLog = "";
-        let prevEval = await getEvaluation(engine, board.getFEN(), shallowPly);
+        let prevVal = await getEvaluation(engine, board.getFEN(), shallowPly);
         let prevFEN = board.getFEN();
         let movesProcessed = 0;
         for (const move of moves){
@@ -90,10 +93,10 @@ fs.readFile(config["games-path"], async (err, data) => {
             const fen = board.getFEN();
 
             tempLog = "";
-            const eval = await getEvaluation(engine, fen, shallowPly);
-            const diff = Math.abs(eval - prevEval);
+            const val = await getEvaluation(engine, fen, shallowPly);
+            const diff = Math.abs(val - prevVal);
             const shallowLog = tempLog;
-            if (Math.sign(prevEval) == Math.sign(eval) && Math.abs(prevEval) > winnerMax){
+            if (Math.sign(prevVal) == Math.sign(val) && Math.abs(prevVal) > winnerMax){
                 // do not count for puzzle potential, this side was already winning.
             }else if (diff >= blunderMag){
                 log(`Blunder identified with shallow search at FEN ${fen}. Beginning deep search...`);
@@ -101,7 +104,7 @@ fs.readFile(config["games-path"], async (err, data) => {
                 // puzzle potential!!! search even deeper to confirm this
                 tempLog = "";
                 const deepEval = await getEvaluation(engine, fen, shallowPly + extraPly);
-                if (Math.abs(deepEval - prevEval) >= blunderMag){
+                if (Math.abs(deepEval - prevVal) >= blunderMag){
                     log(`Blunder confirmed with deeper search`);
                     log(`Determining other solutions...`);
 
@@ -115,8 +118,8 @@ fs.readFile(config["games-path"], async (err, data) => {
                             board.makeMove(m);
                             tempLog = "";
                             const cmpEval = await getEvaluation(engine, board.getFEN(), shallowPly);
-                            if (Math.abs(cmpEval - prevEval) >= blunderMag && Math.sign(cmpEval) == Math.sign(deepEval))
-                                multiAnswer.push({ move: m.uci, eval: cmpEval, log: tempLog });
+                            if (Math.abs(cmpEval - prevVal) >= blunderMag && Math.sign(cmpEval) == Math.sign(deepEval))
+                                multiAnswer.push({ move: m.uci, val: cmpEval, log: tempLog });
                             board.unmakeMove(m);
                         }
                     }
@@ -127,12 +130,12 @@ fs.readFile(config["games-path"], async (err, data) => {
                         log(`Too many valid solutions (max is ${config["max-solutions"]}). Candidate rejected.`);
                     }else{
                         log("Puzzle added.");
-                        puzzlePotential.push({ id: gamesProcessed, fen, deepLog, shallowLog, prevEval, prevFEN, mistake: move.uci, otherMoves: multiAnswer });
+                        puzzlePotential.push({ id: gamesProcessed, fen, deepLog, shallowLog, prevVal, prevFEN, mistake: move.uci, otherMoves: multiAnswer });
                         fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
                     }
                 }
             }
-            prevEval = eval;
+            prevVal = val;
             prevFEN = fen;
 
             const gameProgress = (++movesProcessed / moves.length) * (1 / gameCount);
@@ -147,3 +150,37 @@ fs.readFile(config["games-path"], async (err, data) => {
     fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
     log(`Finished considering all puzzle candidates. Found ${puzzlePotential.length} candidates.`);
 });
+
+
+function prepareCmdsFile(){
+    let cmds = ``;
+    let timeout = 20;
+    let p = 0;
+    for (const pgn of gamePGNs){
+        const board = new Board();
+
+        // extract all move objects to play on the board
+        const moveStrings = PGN_Handler.extractMoves(pgn);
+        const moves = [];
+        for (const m of moveStrings.split(" ")){
+            const move = board.getMoveOfSAN(m);
+            if (move){
+                moves.push(move);
+                board.makeMove(move);
+                move.san = m;
+                timeout--;
+                if (timeout == 0){
+                    timeout = 10;
+                    cmds += `
+clear hash
+position fen ${board.getFEN()}
+go movetime 10000
+`;
+                    p++;
+                }
+            }
+        }
+    }
+    console.log(`Gathered ${p} positions`);
+    fs.writeFileSync("./cmds.txt", cmds);
+}

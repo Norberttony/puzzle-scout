@@ -2,21 +2,20 @@
 
 // this code REPEATEDLY violates the DRY principle. read at your own risk.
 
-if (typeof module !== "undefined"){
-    var { algebraicToSquare, squareToAlgebraic, squareToAlgebraicFile, squareToAlgebraicRank, getFileFromSq, getRankFromSq } = require("./coords");
-    var { Piece, PieceTypeToFEN, FENToPiece, PieceASCII } = require("./piece");
-    ({ Move } = require("./move"));
-    var { numSquaresToEdge, dirOffsets } = require("./pre-game");
-    var { getMoveSAN } = require("./san");
-}
+import { algebraicToSquare, getFileFromSq, getRankFromSq } from "./coords.mjs";
+import { Piece, FENToPiece, PieceTypeToFEN } from "./piece.mjs";
+import { Move } from "./move.mjs";
+import { numSquaresToEdge, dirOffsets } from "./pre-game.mjs";
+import { getMoveSAN } from "./san.mjs";
+
 
 // removes all glyphs from SAN
-function removeGlyphs(san){
+export function removeGlyphs(san){
     san = san.replace(/[#+?!]/g, "");
     return san;
 }
 
-const StartingFEN = "unbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNU w 1";
+export const StartingFEN = "unbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNU w 1";
 
 // The Board object contains a game state of the board. Certain moves can be done or undone, but
 // they are not stored.
@@ -24,13 +23,12 @@ const StartingFEN = "unbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNU w 1";
 // - class Board DOES NOT handle it currently! all of it is done by the GraphicalState (because it
 //      is rather slow). I was considering implementing Zobrist hashing for Board to allow really
 //      fast searching, albeit occasionally very very slightly inaccurate. That has not been done :)
-class Board {
+export class Board {
     constructor(){
         // contains the type and color of every piece on all 64 squares (Piece[Color] | Piece[Type])
         this.squares = new Uint8Array(64);
 
         this.result;
-        this.termination;
 
         this.turn = Piece.white;
 
@@ -64,38 +62,42 @@ class Board {
         position += this.turn;
         return position;
     }
-    setResult(result, termination){
-        this.result = result;
-        this.termination = termination;
-        return result;
+    setResult(result, termination, winner){
+        this.result = { result, termination, winner };
+        return this.result;
     }
     // checks if the current player is checkmated... or stalemated...
-    isGameOver(moves = this.generateMoves()){
-        if (this.result) return this.result;
+    isGameOver(moves = undefined){
+        if (this.result)
+            return this.result;
 
-        // yup. this code is not broken. ha ha.
-        this.nextTurn();
+        if (!moves)
+            moves = this.generateMoves();
 
         // no legal moves?!
         if (moves.length == 0){
+            this.nextTurn();
             if (this.isAttacked(this.getKingSq())){
                 // CHECKMATE!!!
-                this.setResult("#", "checkmate");
+                this.winner = this.turn;
+                if (this.winner == Piece.black)
+                    this.setResult("0-1", "checkmate", this.turn);
+                else
+                    this.setResult("1-0", "checkmate", this.turn);
             }else{
                 // stalemate...!
-                this.setResult("/", "stalemate");
+                this.winner = 0;
+                this.setResult("1/2-1/2", "stalemate", 0);
             }
+            this.nextTurn();
         }
-
-        // nothing to see here...!
-        this.nextTurn();
 
         return this.result;
     }
 
     // ========================================= GENERATE MOVES START ========================================= //
     // detects which piece this is, and generates moves for it. Generally used for graphical side of app.
-    generatePieceMoves(start, piece){
+    generatePieceMoves(start, piece, filter = true){
         let moves = [];
 
         if (Piece.ofColor(piece, this.turn)){
@@ -124,7 +126,10 @@ class Board {
             }
         }
 
-        return this.filterLegalMoves(moves);
+        if (filter)
+            return this.filterLegalMoves(moves);
+        else
+            return moves;
     }
     // generates all possible moves for the given turn
     generateMoves(filter = true){
@@ -813,7 +818,6 @@ class Board {
 
         // removes any stored result
         delete this.result;
-        delete this.termination;
     }
     // ==== END MOVE GENERATION AND CHECKING ==== //
 
@@ -826,20 +830,52 @@ class Board {
         // take a short cut by considering the destination square of the san and the move piece's type
         san = removeGlyphs(san);
         const toSq = algebraicToSquare(san.substring(san.length - 2));
-        const pieceType = FENToPiece[this.turn == Piece.white ? san[0] : san[0].toLowerCase()];
+        const pieceValue = FENToPiece[this.turn == Piece.white ? san[0] : san[0].toLowerCase()];
 
-        const moves = this.generateMoves(false);
+        if (toSq < 0 || toSq >= 64 || isNaN(toSq))
+            return;
 
-        for (const m of moves){
+        const possibleMoves = [];
+        for (let j = 0; j < dirOffsets.length; j++){
+            let blockerCase = Piece.ofType(pieceValue, Piece.springer) || Piece.ofType(pieceValue, Piece.chameleon) ? 1 : 0;
+            let isCham = Piece.ofType(pieceValue, Piece.chameleon);
+            for (let i = 1; i <= numSquaresToEdge[toSq][j]; i++){
+                const startSq = toSq + i * dirOffsets[j];
+                const val = this.squares[startSq];
+                if (val){
+                    if (val == pieceValue){
+                        const pieceMoves = this.generatePieceMoves(startSq, val, false);
+                        for (const m of pieceMoves){
+                            if (m.to == toSq){
+                                possibleMoves.push(m);
+                            }
+                        }
+                    }
+                    if (Piece.getColor(pieceValue) != Piece.getColor(val)){
+                        if (blockerCase && (!isCham || Piece.ofType(val, Piece.springer)))
+                            blockerCase--;
+                        else
+                            break;
+                    }else{
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (const m of possibleMoves){
             // only consider SAN if to squares and piece types match
-            if (m.to != toSq || this.squares[m.from] != pieceType)
+            if (m.to != toSq || this.squares[m.from] != pieceValue)
                 continue;
 
-            const SAN = getMoveSAN(this, m, moves);
+            const SAN = getMoveSAN(this, m, possibleMoves, false);
             if (removeGlyphs(SAN) == san){
                 return m;
             }
         }
+
+        console.error(san, possibleMoves, this.getFEN());
+        throw new Error(`Move of SAN ${san} could not be found.`);
 
         return;
     }
@@ -957,9 +993,8 @@ class Board {
         return FEN;
     }
 
-    getLANMove(LAN){
+    getMoveOfLAN(LAN){
         const moves = this.generateMoves(true);
-        LAN = LAN.trim();
 
         for (const m of moves){
             if (m.uci == LAN){
@@ -969,6 +1004,3 @@ class Board {
     }
     // ==== END STATE UPDATES ==== //
 }
-
-if (typeof(exports) !== "undefined")
-    module.exports = { Board, StartingFEN };

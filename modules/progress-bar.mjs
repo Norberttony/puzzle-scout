@@ -1,5 +1,5 @@
 
-class ProgressBar {
+export class ProgressBar {
     #progress = 0;
 
     constructor(title){
@@ -33,5 +33,3 @@ class ProgressBar {
     }
 }
 ProgressBar.mostRecent = undefined;
-
-module.exports = { ProgressBar };
