@@ -2,12 +2,15 @@
 import fs from "fs";
 
 import { extractEngines } from "./modules/engine.mjs";
-import { getEvaluation } from "./modules/engine-helpers.mjs";
+import { getEvaluation, analyzeGame, isMate } from "./modules/engine-helpers.mjs";
 import * as PGN_Handler from "./modules/pgn-file-reader.mjs";
 import { Board } from "./game/game.mjs";
 import { ProgressBar } from "./modules/progress-bar.mjs";
 import { log } from "./modules/logger.mjs";
 import { config } from "./modules/config.mjs";
+import { Piece } from "./game/piece.mjs";
+import { Move } from "./game/move.mjs";
+import { getMoveSAN } from "./game/san.mjs";
 
 
 const engineWrapper = extractEngines("./engine")[0];
@@ -77,77 +80,204 @@ fs.readFile(config["games-path"], async (err, data) => {
         for (let i = moves.length - 1; i >= 0; i--)
             board.unmakeMove(moves[i]);
 
+        log("Analyzing game...");
+
+        const analysis = await analyzeGame(board.getFEN(), moves, engine, shallowPly);
+
         log("Searching for blunders...");
 
-        // go through game and find blunders.
-        tempLog = "";
-        let prevVal = await getEvaluation(engine, board.getFEN(), shallowPly);
-        let prevFEN = board.getFEN();
-        let movesProcessed = 0;
-        for (const move of moves){
-            board.makeMove(move);
+        // convert the list of analyses of each intermediate position into a list of blunders.
+        const blunders = [];
+        let prevThink = analysis[0];
+        for (let i = 1; i < analysis.length; i++){
+            const think = analysis[i];
+            const delta = Math.abs(think.val - prevThink.val);
 
-            if (board.isGameOver())
-                break;
+            // the blunder should flip the script for the previously winning side, and if it does
+            // not, then it is not a good puzzle.
+            if (Math.sign(prevThink.val) == Math.sign(think.val) && Math.abs(prevThink.val) > winnerMax)
+                continue;
 
-            const fen = board.getFEN();
+            // can't take advantage of a blunder that happened before the engine could see it (horizon effect)
+            if (think.color == Piece.white && think.val < 0 || think.color == Piece.black && think.val > 0)
+                continue;
 
-            tempLog = "";
-            const val = await getEvaluation(engine, fen, shallowPly);
-            const diff = Math.abs(val - prevVal);
-            const shallowLog = tempLog;
-            if (Math.sign(prevVal) == Math.sign(val) && Math.abs(prevVal) > winnerMax){
-                // do not count for puzzle potential, this side was already winning.
-            }else if (diff >= blunderMag){
-                log(`Blunder identified with shallow search at FEN ${fen}. Beginning deep search...`);
+            if (delta >= blunderMag){
+                // now that a possible blunder has been found, it should be confirmed that it is a blunder.
+                // if a checkmate has been found, it does not have to be checked.
+                if (!isMate(think.val)){
+                    engine.write(`position fen ${think.fen}`);
+                    engine.write(`position moves ${think.move.uci}`);
+                    const deepThink = await getEvaluation(engine, shallowPly + extraPly);
 
-                // puzzle potential!!! search even deeper to confirm this
-                tempLog = "";
-                const deepEval = await getEvaluation(engine, fen, shallowPly + extraPly);
-                if (Math.abs(deepEval - prevVal) >= blunderMag){
-                    log(`Blunder confirmed with deeper search`);
-                    log(`Determining other solutions...`);
+                    // this should still be a blunder...
+                    if (Math.sign(deepThink.val) != Math.sign(think.val))
+                        continue;
 
-                    const deepLog = tempLog;
+                    // blunder should be significant
+                    if (Math.abs(prevThink.val - deepThink.val) < blunderMag)
+                        continue;
 
-                    // check if there are multiple moves that allow for a winning position.
-                    const testMoves = board.generateMoves(true);
-                    let multiAnswer = [];
-                    for (const m of testMoves){
-                        if (m.uci != move.uci){
-                            board.makeMove(m);
-                            tempLog = "";
-                            const cmpEval = await getEvaluation(engine, board.getFEN(), shallowPly);
-                            if (Math.abs(cmpEval - prevVal) >= blunderMag && Math.sign(cmpEval) == Math.sign(deepEval))
-                                multiAnswer.push({ move: m.uci, val: cmpEval, log: tempLog });
-                            board.unmakeMove(m);
-                        }
-                    }
+                    deepThink.fen = think.fen;
+                    deepThink.ply = shallowPly + extraPly;
+                    deepThink.move = think.move;
+                    deepThink.color = think.color;
 
-                    log(`Found ${multiAnswer.length} solutions.`);
+                    // prioritize the longer PV
+                    deepThink.pv = deepThink.pv.split(" ").length > think.pv.split(" ").length ? deepThink.pv : think.pv;
 
-                    if (multiAnswer.length > config["max-solutions"]){
-                        log(`Too many valid solutions (max is ${config["max-solutions"]}). Candidate rejected.`);
-                    }else{
-                        log("Puzzle added.");
-                        puzzlePotential.push({ id: gamesProcessed, fen, deepLog, shallowLog, prevVal, prevFEN, mistake: move.uci, otherMoves: multiAnswer });
-                        fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
-                    }
+                    blunders.push(deepThink);
+                }else{
+                    blunders.push(think);
                 }
             }
-            prevVal = val;
-            prevFEN = fen;
 
-            const gameProgress = (++movesProcessed / moves.length) * (1 / gameCount);
-            bar.progress = gameProgress + gamesProcessed / gameCount;
+            prevThink = think;
         }
+
+        log(`${blunders.length} blunders have been found. Beginning verification phase...`);
+
+        // convert a list of blunders into a list of potential puzzles.
+        const puzzles = [];
+        for (const blunder of blunders){
+            board.loadFEN(blunder.fen);
+            board.makeMove(blunder.move);
+
+            log(`Looking at puzzle: ${blunder.val} ${blunder.pv}`);
+
+            // extract PV into actual move objects
+            const puzzle = [];
+            for (const uci of blunder.pv.split(" ")){
+                const move = board.getMoveOfLAN(uci);
+                if (move){
+                    puzzle.push(move);
+                    board.makeMove(move);
+                }
+            }
+            
+            board.loadFEN(blunder.fen);
+            board.makeMove(blunder.move);
+
+            const lastMoves = [];
+
+            let isGood = true;
+            for (let i = 0; i < puzzle.length; i += 2){
+                const solutionMove = puzzle[i];
+                solutionMove.UCI = solutionMove.uci;
+
+                if (i > 0)
+                    board.makeMove(puzzle[i - 1]);
+
+                log(board.getFEN());
+                const moves = board.generateMoves(true);
+
+                for (const move of moves){
+                    if (i == 0)
+                        break;
+                    if (move.uci == solutionMove.uci)
+                        continue;
+
+                    board.makeMove(move);
+                    engine.write(`position fen ${board.getFEN()}`);
+                    const think = await getEvaluation(engine, config["verify-search-ply"]);
+                    board.unmakeMove(move);
+
+                    log(`Try maybe ${think.val} ${move.uci} instead of ${blunder.val} ${solutionMove.uci}?`);
+
+                    if (Math.sign(think.val) == Math.sign(blunder.val) && (Math.abs(think.val) >= Math.abs(blunder.val) || Math.abs(think.val - blunder.val) < config["verify-delta"])){
+                        log(`Instead of ${blunder.val} ${solutionMove.uci}, could play ${think.val} ${move.uci}`);
+                        if (!isMate(blunder.val)){
+                            // probably a win material line, which only needs to be proven up to a point.
+                            if (i > 0){
+                                lastMoves.push(move);
+                                while (i < puzzle.length - 1)
+                                    puzzle.pop();
+                                console.log(puzzle);
+                            }else{
+                                isGood = false;
+                                break;
+                            }
+                        }else{
+                            // if it is the last move and there are multiple solutions, be lenient and accept them.
+                            if (solutionMove == puzzle[puzzle.length - 1]){
+                                lastMoves.push(solutionMove);
+                            }else{
+                                isGood = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                board.makeMove(solutionMove);
+
+                if (!isGood || lastMoves.length)
+                    break;
+            }
+
+            console.log("PUZZLE STUFF", puzzle, lastMoves);
+
+            if (!isGood)
+                continue;
+
+            if (lastMoves.length > 0){
+                lastMoves.push(puzzle[puzzle.length - 1]);
+                puzzle[puzzle.length - 1] = lastMoves;
+            }
+
+            // convert to SAN
+            const solution = [];
+            board.loadFEN(blunder.fen);
+            board.makeMove(blunder.move);
+            const afterBlunderFEN = board.getFEN();
+            for (const move of puzzle){
+                if (move instanceof Move){
+                    const san = getMoveSAN(board, move);
+                    solution.push(san);
+                    board.makeMove(move);
+                }
+            }
+            if (lastMoves.length > 0){
+                const lastSANs = [];
+                for (const move of lastMoves){
+                    const san = getMoveSAN(board, move);
+                    lastSANs.push(san);
+                }
+                solution.push(lastSANs);
+            }
+
+            let title = blunder.color == Piece.white ? "WTP" : "BTP";
+            if (blunder.val == 0)
+                title += " and draw";
+            else if (isMate(blunder.val))
+                title += ` Mate in ${(mateIn(blunder.val) + 1) / 2}`;
+            else
+                title += " and win material";
+
+            const responses = [];
+            for (let i = 0; i < solution.length; i++)
+                responses.push({});
+
+            puzzles.push({
+                fen: afterBlunderFEN,
+                beforeBlunder: blunder.fen,
+                solution,
+                responses,
+                title,
+                difficulty: "undetermined",
+                source: "???"
+            });
+        }
+
+        log(`Generated ${puzzles.length} additional puzzles`);
+
+        puzzlePotential.push(...puzzles);
+        fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
 
         gamesProcessed++;
         engine.stop();
     }
-    console.log(puzzlePotential);
 
-    fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
     log(`Finished considering all puzzle candidates. Found ${puzzlePotential.length} candidates.`);
 });
 
