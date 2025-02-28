@@ -47,14 +47,14 @@ export class TaskManager {
         const t = this;
         function message(e){
             worker.off("message", message);
-            worker.off("error", error);
+            worker.off("messageerror", error);
             t.#freeWorker(worker);
             res(e);
         }
 
         function error(e){
             worker.off("message", message);
-            worker.off("error", error);
+            worker.off("messageerror", error);
             t.#freeWorker(worker);
             rej(e);
         }

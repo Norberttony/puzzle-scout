@@ -37,10 +37,11 @@ fs.readFile(config["games-path"], async (err, data) => {
 
                 puzzlePotential.push(...puzzles);
                 fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
+
+                if (gamesProcessed == gamePGNs.length)
+                    tm.terminate();
             });
     }
-
-    tm.terminate();
 });
 
 
