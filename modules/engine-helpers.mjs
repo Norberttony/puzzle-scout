@@ -218,8 +218,12 @@ export async function verifyCandidate(fen, candidate, engine, lineVal, ply, delt
     }
 
     if (lastMoves.length > 0){
-        lastMoves.push(candidate[candidate.length - 1]);
-        candidate[candidate.length - 1] = lastMoves;
+        if (candidate.length > 0){
+            lastMoves.push(candidate[candidate.length - 1]);
+            candidate[candidate.length - 1] = lastMoves;
+        }else{
+            candidate.push(lastMoves);
+        }
     }
 
     return candidate;
@@ -240,7 +244,7 @@ export function formatPuzzle(fen, puzzle, lineVal, stp){
     }
 
     const lastMoves = puzzle[puzzle.length - 1];
-    if (typeof lastMoves != "string" && lastMoves.length > 0){
+    if (lastMoves && typeof lastMoves != "string" && lastMoves.length > 0){
         const lastSANs = [];
         for (const move of lastMoves){
             const san = getMoveSAN(board, move);
