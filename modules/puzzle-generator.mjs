@@ -5,15 +5,13 @@ import fs from "fs";
 import { log } from "./logger.mjs";
 import { Board } from "../game/game.mjs";
 import * as PGN_Handler from "./pgn-file-reader.mjs";
-import { analyzeGame, findBlunders, getMovesFromPV, verifyCandidate, formatPuzzle, generatePuzzleCandidates } from "./engine-helpers.mjs";
+import { analyzeGame, findBlunders, getMovesFromPV, verifySolution, formatPuzzle, generatePuzzleCandidates } from "./engine-helpers.mjs";
 import { config } from "./config.mjs";
 import { extractEngines } from "./engine.mjs";
 
 
 const shallowPly = config["shallow-search-depth-ply"];
-const extraPly = config["confirm-search-additional-ply"];
 const blunderMag = config["blunder-magnitude"];
-const winnerMax = config["winner-max"];
 
 const engineWrapper = extractEngines(workerData.data.engineDir)[0];
 
@@ -57,29 +55,30 @@ async function generatePuzzles(pgn, engineWrapper){
     fs.writeFileSync(`./debug/${workerData.id}-blunders.json`, JSON.stringify(blunders));
 
     const candidates = generatePuzzleCandidates(blunders, config["winner-max"]);
+    fs.writeFileSync(`./debug/${workerData.id}-candidates.json`, JSON.stringify(candidates));
 
     // convert a list of candidates into a list of potential puzzles.
     const puzzles = [];
     for (const candidate of candidates){
-        board.loadFEN(candidate.fenBeforeBadMove);
-        board.makeMove(candidate.badMove);
+        board.loadFEN(candidate.fenBeforeMistake);
+        board.makeMove(candidate.leadingMistake);
         const afterBlunderFEN = board.getFEN();
 
-        log(`Looking at puzzle: ${blunder.val} ${blunder.pv}`);
+        // extract PV into move objects
+        const solution = getMovesFromPV(afterBlunderFEN, candidate.solution);
 
-        // extract PV into actual move objects
-        const candidate = getMovesFromPV(afterBlunderFEN, blunder.pv);
+        log(`Verifying candidate: ${JSON.stringify(candidate)}`);
 
-        const puzzle = await verifyCandidate(afterBlunderFEN, candidate, engine, blunder.val, config["verify-search-ply"], config["verify-delta"]);
+        const puzzle = await verifySolution(afterBlunderFEN, solution, engine, candidate.scoreAfterMistake, config["verify-search-ply"], config["verify-delta"]);
 
         log(`After verification: ${JSON.stringify(puzzle)}`);
 
         if (!puzzle)
             continue;
 
-        const formatted = formatPuzzle(afterBlunderFEN, puzzle, blunder.val, blunder.color);
+        const formatted = formatPuzzle(afterBlunderFEN, puzzle, candidate.scoreAfterMistake, board.turn);
         
-        formatted.beforeBlunderFEN = blunder.fen;
+        formatted.beforeBlunderFEN = candidate.fenBeforeMistake;
         formatted.fromGame = pgn;
 
         puzzles.push(formatted);

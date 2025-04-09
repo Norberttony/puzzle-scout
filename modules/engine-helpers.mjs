@@ -3,6 +3,7 @@ import { Board } from "../game/game.mjs";
 import { Piece } from "../game/piece.mjs";
 import { Move } from "../game/move.mjs";
 import { getMoveSAN } from "../game/san.mjs";
+import { log } from "./logger.mjs";
 
 
 export class Score {
@@ -144,7 +145,7 @@ export function findBlunders(analysis, blunderMag){
 }
 
 // takes in a list of blunders (from findBlunders) and returns a list of puzzle candidates,
-// which is a list of { fen, solution }
+// which is a list of { fenBeforeMistake, leadingMistake, solution }
 export function generatePuzzleCandidates(blunders, winnerMax){
     const candidates = [];
 
@@ -159,9 +160,10 @@ export function generatePuzzleCandidates(blunders, winnerMax){
             continue;
 
         const candidate = {
-            fen: blunder.fenBeforeBadMove,
-            badMove: blunder.badMove,
-            solution: expectedPV
+            fenBeforeMistake: blunder.fenBeforeBadMove,
+            leadingMistake: blunder.badMove,
+            solution: blunder.punishPV,
+            scoreAfterMistake: blunder.afterScore
         };
 
         candidates.push(candidate);
@@ -186,7 +188,7 @@ export function getMovesFromPV(fen, pv){
     return moves;
 }
 
-export async function verifyCandidate(fen, candidate, engine, lineVal, ply, delta){
+export async function verifySolution(fen, candidate, engine, lineScore, ply, delta){
     const board = new Board();
     board.loadFEN(fen);
 
@@ -202,32 +204,41 @@ export async function verifyCandidate(fen, candidate, engine, lineVal, ply, delt
         if (i > 0)
             board.makeMove(candidate[i - 1]);
 
+        // see if any other moves come up with the same evaluation
         const moves = board.generateMoves(true);
 
         for (const move of moves){
             if (move.uci == solutionMove.uci)
                 continue;
 
+            // analyze this contesting move
             board.makeMove(move);
             engine.write(`position fen ${board.getFEN()}`);
             const think = await getEvaluation(engine, ply);
             board.unmakeMove(move);
 
-            if (Math.sign(think.val) == Math.sign(lineVal) && (Math.abs(think.val) >= Math.abs(lineVal) || Math.abs(think.val - lineVal) < delta)){
-                if (!isMate(lineVal)){
+            if (lineScore.isMate && think.score.isMate){
+                if (lineScore.val == think.score.val){
                     // probably a win material line, which only needs to be proven up to a point.
                     if (i > 0){
                         lastMoves.push(move);
                         while (i < candidate.length - 1)
                             candidate.pop();
                     }else{
+                        log(`Rejected candidate because instead of move ${solutionMove.uci} could have played ${move.uci} (mate in ${think.score.value})`);
                         return false;
                     }
-                }else{
+                }
+            }else if (!lineScore.isMate){
+                // lineScore is not a mating value
+                const mVal = think.score.value;
+                const lVal = lineScore.value;
+                if (Math.sign(mVal) == Math.sign(lVal) && (Math.abs(mVal) >= Math.abs(lVal) || Math.abs(mVal - lVal) < delta)){
                     // if it is the last move and there are multiple solutions, be lenient and accept them.
                     if (solutionMove == candidate[candidate.length - 1]){
                         lastMoves.push(solutionMove);
                     }else{
+                        log(`Rejected candidate because instead of move ${solutionMove.uci} (evaluation is ${lineScore.value}) could have played ${move.uci} (evaluation is ${mVal})`);
                         return false;
                     }
                 }
@@ -252,7 +263,7 @@ export async function verifyCandidate(fen, candidate, engine, lineVal, ply, delt
     return candidate;
 }
 
-export function formatPuzzle(fen, puzzle, lineVal, stp){
+export function formatPuzzle(fen, puzzle, lineScore, stp){
     const board = new Board();
     board.loadFEN(fen);
 
@@ -278,10 +289,10 @@ export function formatPuzzle(fen, puzzle, lineVal, stp){
 
     // determine title
     let title = stp == Piece.white ? "WTP" : "BTP";
-    if (lineVal == 0)
+    if (lineScore.value == 0)
         title += " and draw";
-    else if (isMate(lineVal))
-        title += ` Mate in ${(mateIn(lineVal) + 1) / 2}`;
+    else if (lineScore.isMate)
+        title += ` Mate in ${(Math.abs(lineScore.value) + 1) / 2}`;
     else
         title += " and win material";
 
