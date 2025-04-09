@@ -5,7 +5,11 @@ import fs from "fs";
 import { log } from "./logger.mjs";
 import { Board } from "../game/game.mjs";
 import * as PGN_Handler from "./pgn-file-reader.mjs";
-import { analyzeGame, findBlunders, getMovesFromPV, verifySolution, formatPuzzle, generatePuzzleCandidates } from "./engine-helpers.mjs";
+
+import { analyzeGame, findBlunders } from "./game-analysis.mjs";
+import { generatePuzzleCandidates, verifySolution, formatPuzzle } from "./puzzle-helpers.mjs";
+import { getMovesFromPV } from "./engine-helpers.mjs";
+
 import { config } from "./config.mjs";
 import { extractEngines } from "./engine.mjs";
 
