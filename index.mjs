@@ -24,7 +24,8 @@ fs.readFile(config["games-path"], async (err, data) => {
     // try to read from file first.
     const puzzlePotential = fs.existsSync(config["results-path"]) ? JSON.parse(fs.readFileSync(config["results-path"]).toString()) : [];
 
-    const tm = new TaskManager("./modules/puzzle-generator.mjs", cpus().length / 2, { engineDir: "./engine" });
+    const threads = 1; // cpus().length / 2
+    const tm = new TaskManager("./modules/puzzle-generator.mjs", threads, { engineDir: "./engine" });
 
     let gamesProcessed = 0;
 
@@ -33,7 +34,6 @@ fs.readFile(config["games-path"], async (err, data) => {
             .then((puzzles) => {
                 gamesProcessed++;
                 bar.progress = gamesProcessed / gamePGNs.length;
-                console.log(puzzles);
 
                 puzzlePotential.push(...puzzles);
                 fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));

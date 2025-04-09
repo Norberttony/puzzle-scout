@@ -5,6 +5,14 @@ import { Move } from "../game/move.mjs";
 import { getMoveSAN } from "../game/san.mjs";
 
 
+export class Score {
+    constructor(value, isMate){
+        this.value = value;
+        this.isMate = isMate;
+    }
+}
+
+
 export function extractFromInfoLine(line, name){
     const idx = line.indexOf(` ${name} `);
     if (idx == -1)
@@ -13,16 +21,6 @@ export function extractFromInfoLine(line, name){
     const leftSpace = idx + 1 + name.length;
     const rightSpace = line.indexOf(" ", leftSpace + 1);
     return line.substring(leftSpace + 1, rightSpace);
-}
-
-const MAX_SCORE = 99999999;
-
-export function isMate(score){
-    return score >= MAX_SCORE - 1000;
-}
-
-export function mateIn(score){
-    return MAX_SCORE - score;
 }
 
 export async function getEvaluation(engine, ply){
@@ -52,14 +50,16 @@ export async function getEvaluation(engine, ply){
 
             const depth = extractFromInfoLine(line, "depth");
             if (depth && parseInt(depth) == ply){
+                const score = new Score();
                 // extract either cp score or mate score.
                 let val = parseInt(extractFromInfoLine(line, "score cp"));
                 if (isNaN(val)){
-                    const mateScore = parseInt(extractFromInfoLine(line, "score mate"));
-                    val = Math.sign(mateScore) * MAX_SCORE - mateScore;
+                    val = parseInt(extractFromInfoLine(line, "score mate"));
+                    score.isMate = true;
                 }
+                score.value = val;
 
-                return { val, pv: currPV, log: tempLog };
+                return { score, pv: currPV, log: tempLog };
             }
         }
     }
@@ -74,8 +74,8 @@ export async function analyzeGame(initialFEN, moves, engine, ply){
     
     // perform analysis of initial position
     {
-        const { val, pv, log } = await getEvaluation(engine, ply);
-        analysis.push({ val, pv, fen: initialFEN, ply, log, color: board.turn });
+        const { score, pv, log } = await getEvaluation(engine, ply);
+        analysis.push({ score, pv, fenBeforeMove: initialFEN, ply, log, color: board.turn });
     }
 
     for (const move of moves){
@@ -87,64 +87,87 @@ export async function analyzeGame(initialFEN, moves, engine, ply){
 
         engine.write(`position moves ${move.uci}`);
 
-        const { val, pv, log } = await getEvaluation(engine, ply);
-        analysis.push({ val, pv, fen, move, ply, log, color: board.turn });
+        const { score, pv, log } = await getEvaluation(engine, ply);
+        analysis.push({ score, pv, fenBeforeMove: fen, move, ply, log, color: board.turn });
     }
 
     return analysis;
 }
 
-export async function findBlunders(analysis, engine, blunderMag, ply, winnerMax){
+// analysis returned from analyzeGame with a { score, pv, fenBeforeMove, move, ply, log, color } per position, excluding
+// the first position which does not have a move.
+// returns a list of { badMove, beforeScore, afterScore, fenBeforeBadMove, expectedPV, punishPV, horizonEffect }
+export async function findBlunders(analysis, blunderMag){
     const blunders = [];
 
     let prevThink = analysis[0];
     for (let i = 1; i < analysis.length; i++){
-        const think = analysis[i];
-        const delta = Math.abs(think.val - prevThink.val);
+        const thisThink = analysis[i];
+        const blunder = {
+            badMove: thisThink.move,
+            beforeScore: prevThink.score,
+            afterScore: thisThink.score,
+            fenBeforeBadMove: thisThink.fenBeforeMove,
+            expectedPV: prevThink.pv,
+            punishPV: thisThink.pv,
+            horizonEffect: false
+        };
+
+        if (thisThink.score.isMate && prevThink.score.isMate){
+            // user played a move such that it takes longer to force a win
+            // in this case, this is noted as a blunder.
+            if (thisThink.score.value - prevThink.score.value != 1){
+                blunders.push(blunder);
+            }
+        }else if (prevThink.score.isMate){
+            // user missed a mate
+            blunders.push(blunder);
+        }else if (thisThink.score.isMate){
+            if (thisThink.color == Piece.white && thisThink.score.value < 0 || thisThink.color == Piece.black && thisThink.score.value > 0){
+                // the horizon effect might have occurred (if white played a move, and only NOW it is a forced mate for white)
+                blunder.horizonEffect = true;
+                blunders.push(blunder);
+            }
+        }else{
+            const delta = Math.abs(thisThink.score.value - prevThink.score.value);
+            if (delta >= blunderMag){
+                if (thisThink.color == Piece.white && thisThink.score.value < 0 || thisThink.color == Piece.black && thisThink.score.value > 0){
+                    // the horizon effect might have occurred (if white played a move, and only NOW it is winning for white)
+                    blunder.horizonEffect = true;
+                }
+                blunders.push(blunder);
+            }
+        }
+    }
+    
+    return blunders;
+}
+
+// takes in a list of blunders (from findBlunders) and returns a list of puzzle candidates,
+// which is a list of { fen, solution }
+export async function generatePuzzleCandidates(blunders, winnerMax){
+    const candidates = [];
+
+    for (const blunder of blunders){
+        // if the horizon effect occurred, where the original mistake is not known
+        if (blunder.horizonEffect)
+            continue;
 
         // the blunder should flip the script for the previously winning side, and if it does
         // not, then it is not a good puzzle.
-        if (Math.sign(prevThink.val) == Math.sign(think.val) && Math.abs(prevThink.val) > winnerMax)
+        if (Math.sign(blunder.beforeScore) == Math.sign(blunder.afterScore) && Math.abs(blunder.beforeScore) > winnerMax)
             continue;
 
-        // can't take advantage of a blunder that happened before the engine could see it (horizon effect)
-        if (think.color == Piece.white && think.val < 0 || think.color == Piece.black && think.val > 0)
-            continue;
+        const candidate = {
+            fen: blunder.fenBeforeBadMove,
+            badMove: blunder.badMove,
+            solution: expectedPV
+        };
 
-        if (delta >= blunderMag){
-            // now that a possible blunder has been found, it should be confirmed that it is a blunder.
-            // if a checkmate has been found, it does not have to be checked.
-            if (!isMate(think.val)){
-                engine.write(`position fen ${think.fen}`);
-                engine.write(`position moves ${think.move.uci}`);
-                const deepThink = await getEvaluation(engine, ply);
-
-                // this should still be a blunder...
-                if (Math.sign(deepThink.val) != Math.sign(think.val))
-                    continue;
-
-                // blunder should be significant
-                if (Math.abs(prevThink.val - deepThink.val) < blunderMag)
-                    continue;
-
-                deepThink.fen = think.fen;
-                deepThink.ply = ply;
-                deepThink.move = think.move;
-                deepThink.color = think.color;
-
-                // prioritize the longer PV
-                deepThink.pv = deepThink.pv.split(" ").length > think.pv.split(" ").length ? deepThink.pv : think.pv;
-
-                blunders.push(deepThink);
-            }else{
-                blunders.push(think);
-            }
-        }
-
-        prevThink = think;
+        candidates.push(candidate);
     }
 
-    return blunders;
+    return candidates;
 }
 
 export function getMovesFromPV(fen, pv){
