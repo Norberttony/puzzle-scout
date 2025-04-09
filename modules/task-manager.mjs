@@ -11,7 +11,7 @@ export class TaskManager {
         this.tasks = [];
 
         for (let i = 0; i < this.workersAmt; i++){
-            const w = new Worker(this.workerPath, { workerData });
+            const w = new Worker(this.workerPath, { workerData: { data: workerData, id: i } });
             this.workers.push(w);
             this.freeWorkers.push(w);
         }

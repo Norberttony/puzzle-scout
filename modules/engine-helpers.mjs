@@ -97,7 +97,7 @@ export async function analyzeGame(initialFEN, moves, engine, ply){
 // analysis returned from analyzeGame with a { score, pv, fenBeforeMove, move, ply, log, color } per position, excluding
 // the first position which does not have a move.
 // returns a list of { badMove, beforeScore, afterScore, fenBeforeBadMove, expectedPV, punishPV, horizonEffect }
-export async function findBlunders(analysis, blunderMag){
+export function findBlunders(analysis, blunderMag){
     const blunders = [];
 
     let prevThink = analysis[0];
@@ -145,7 +145,7 @@ export async function findBlunders(analysis, blunderMag){
 
 // takes in a list of blunders (from findBlunders) and returns a list of puzzle candidates,
 // which is a list of { fen, solution }
-export async function generatePuzzleCandidates(blunders, winnerMax){
+export function generatePuzzleCandidates(blunders, winnerMax){
     const candidates = [];
 
     for (const blunder of blunders){

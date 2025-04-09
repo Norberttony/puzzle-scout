@@ -15,7 +15,7 @@ const extraPly = config["confirm-search-additional-ply"];
 const blunderMag = config["blunder-magnitude"];
 const winnerMax = config["winner-max"];
 
-const engineWrapper = extractEngines(workerData.engineDir)[0];
+const engineWrapper = extractEngines(workerData.data.engineDir)[0];
 
 
 parentPort.on("message", async (pgn) => {
@@ -48,13 +48,13 @@ async function generatePuzzles(pgn, engineWrapper){
     // analyze each position
     log("Analyzing game...");
     const analysis = await analyzeGame(board.getFEN(), moves, engine, shallowPly);
-    log(JSON.stringify(analysis));
+    fs.writeFileSync(`./debug/${workerData.id}-analysis.json`, JSON.stringify(analysis));
 
     // identify blunders from analysis
     log("Searching for blunders...");
-    const blunders = await findBlunders(analysis, blunderMag);
-    log(JSON.stringify(blunders));
+    const blunders = findBlunders(analysis, blunderMag);
     log(`${blunders.length} blunders have been found.`);
+    fs.writeFileSync(`./debug/${workerData.id}-blunders.json`, JSON.stringify(blunders));
 
     const candidates = generatePuzzleCandidates(blunders, config["winner-max"]);
 
