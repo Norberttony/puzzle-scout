@@ -36,10 +36,10 @@ export async function getEvaluation(engine, ply){
         if (line.startsWith("info")){
 
             // extract PV
-            const pvIdx = line.indexOf("pv") + 3;
-            const pv = line.substring(pvIdx).trim();
-            const pvDepth = pv.split(" ").length + 1;
-            if (pvDepth > currPVDepth){
+            const pvIdx = line.indexOf("pv");
+            const pv = line.substring(pvIdx + 3).trim();
+            const pvDepth = pv.split(" ").length + (pv.length > 0 ? 1 : 0);
+            if (pvIdx > -1 && pvDepth > currPVDepth){
                 currPV = pv;
                 currPVDepth = pvDepth;
             }

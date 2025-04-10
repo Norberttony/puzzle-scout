@@ -59,7 +59,7 @@ export function findBlunders(analysis, blunderMag){
         if (thisThink.score.isMate && prevThink.score.isMate){
             // user played a move such that it takes longer to force a win
             // in this case, this is noted as a blunder.
-            if (thisThink.score.value - prevThink.score.value != 1){
+            if (prevThink.score.value - thisThink.score.value != 1){
                 blunders.push(blunder);
             }
         }else if (prevThink.score.isMate){
@@ -81,6 +81,8 @@ export function findBlunders(analysis, blunderMag){
                 blunders.push(blunder);
             }
         }
+
+        prevThink = thisThink;
     }
     
     return blunders;

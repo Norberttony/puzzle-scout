@@ -23,6 +23,10 @@ export function generatePuzzleCandidates(blunders, winnerMax){
         if (Math.sign(blunder.beforeScore) == Math.sign(blunder.afterScore) && Math.abs(blunder.beforeScore) > winnerMax)
             continue;
 
+        // the blunder should result in a relatively winning position for one of the players...
+        if (!blunder.afterScore.isMate && Math.abs(blunder.afterScore.value) < 600)
+            continue;
+
         const candidate = {
             fenBeforeMistake: blunder.fenBeforeBadMove,
             leadingMistake: blunder.badMove,
