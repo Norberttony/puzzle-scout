@@ -1,6 +1,6 @@
 
-import { Board } from "../game/game.mjs";
-import { Piece } from "../game/piece.mjs";
+import { Board } from "./game/game.mjs";
+import { Piece } from "./game/piece.mjs";
 import { getEvaluation } from "./engine-helpers.mjs";
 
 

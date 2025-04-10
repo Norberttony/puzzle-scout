@@ -1,8 +1,8 @@
 
-import { Move } from "../game/move.mjs";
-import { Board } from "../game/game.mjs";
-import { Piece } from "../game/piece.mjs";
-import { getMoveSAN } from "../game/san.mjs";
+import { Move } from "./game/move.mjs";
+import { Board } from "./game/game.mjs";
+import { Piece } from "./game/piece.mjs";
+import { getMoveSAN } from "./game/san.mjs";
 import { getEvaluation } from "./engine-helpers.mjs";
 import { log } from "./logger.mjs";
 

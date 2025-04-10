@@ -3,7 +3,7 @@ import fs from "fs";
 import { cpus } from "os";
 
 import * as PGN_Handler from "./modules/pgn-file-reader.mjs";
-import { Board } from "./game/game.mjs";
+import { Board } from "./modules/game/game.mjs";
 import { ProgressBar } from "./modules/progress-bar.mjs";
 import { log } from "./modules/logger.mjs";
 import { config } from "./modules/config.mjs";

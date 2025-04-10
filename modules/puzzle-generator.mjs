@@ -3,7 +3,7 @@ import { parentPort, workerData } from "worker_threads";
 import fs from "fs";
 
 import { log } from "./logger.mjs";
-import { Board } from "../game/game.mjs";
+import { Board } from "./game/game.mjs";
 import * as PGN_Handler from "./pgn-file-reader.mjs";
 
 import { analyzeGame, findBlunders } from "./game-analysis.mjs";

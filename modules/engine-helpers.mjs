@@ -1,5 +1,5 @@
 
-import { Board } from "../game/game.mjs";
+import { Board } from "./game/game.mjs";
 
 
 export class Score {

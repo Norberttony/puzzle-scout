@@ -1,9 +1,9 @@
 
 import fs from "fs";
 
-import { Board } from "../game/game.mjs";
-import { Piece } from "../game/piece.mjs";
-import { getMoveSAN } from "../game/san.mjs";
+import { Board } from "./game/game.mjs";
+import { Piece } from "./game/piece.mjs";
+import { getMoveSAN } from "./game/san.mjs";
 
 
 // splits the given string into each individual game.
