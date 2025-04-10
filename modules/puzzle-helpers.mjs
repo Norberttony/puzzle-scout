@@ -5,6 +5,7 @@ import { Piece } from "./game/piece.mjs";
 import { getMoveSAN } from "./game/san.mjs";
 import { getEvaluation } from "./engine-helpers.mjs";
 import { log } from "./logger.mjs";
+import { getMovesFromPV } from "./engine-helpers.mjs";
 
 
 // takes in a list of blunders (from findBlunders) and returns a list of puzzle candidates,
@@ -35,21 +36,30 @@ export function generatePuzzleCandidates(blunders, winnerMax){
     return candidates;
 }
 
-export async function verifySolution(fen, candidate, engine, lineScore, ply, delta){
+export async function verifySolution(candidate, engine, ply, delta){
     const board = new Board();
-    board.loadFEN(fen);
+    board.loadFEN(candidate.fenBeforeMistake);
+    board.makeMove(candidate.leadingMistake);
 
-    // perform a copy
-    candidate = [ ...candidate ];
+    const lineScore = candidate.scoreAfterMistake;
+
+    // extract PV into move objects
+    const candidateSol = getMovesFromPV(board.getFEN(), candidate.solution);
+
+    const solution = [];
 
     const lastMoves = [];
     
-    for (let i = 0; i < candidate.length; i += 2){
-        const solutionMove = candidate[i];
+    for (let i = 0; i < candidateSol.length; i += 2){
+        const solutionMove = candidateSol[i];
         solutionMove.UCI = solutionMove.uci;
 
-        if (i > 0)
-            board.makeMove(candidate[i - 1]);
+        if (i > 0){
+            board.makeMove(candidateSol[i - 1]);
+            solution.push(candidateSol[i - 1]);
+        }
+
+        solution.push(solutionMove);
 
         // see if any other moves come up with the same evaluation
         const moves = board.generateMoves(true);
@@ -69,8 +79,6 @@ export async function verifySolution(fen, candidate, engine, lineScore, ply, del
                     // probably a win material line, which only needs to be proven up to a point.
                     if (i > 0){
                         lastMoves.push(move);
-                        while (i < candidate.length - 1)
-                            candidate.pop();
                     }else{
                         log(`Rejected candidate because instead of move ${solutionMove.uci} could have played ${move.uci} (mate in ${think.score.value})`);
                         return false;
@@ -82,8 +90,8 @@ export async function verifySolution(fen, candidate, engine, lineScore, ply, del
                 const lVal = lineScore.value;
                 if (Math.sign(mVal) == Math.sign(lVal) && (Math.abs(mVal) >= Math.abs(lVal) || Math.abs(mVal - lVal) < delta)){
                     // if it is the last move and there are multiple solutions, be lenient and accept them.
-                    if (solutionMove == candidate[candidate.length - 1]){
-                        lastMoves.push(solutionMove);
+                    if (i > 0){
+                        lastMoves.push(move);
                     }else{
                         log(`Rejected candidate because instead of move ${solutionMove.uci} (evaluation is ${lineScore.value}) could have played ${move.uci} (evaluation is ${mVal})`);
                         return false;
@@ -92,22 +100,32 @@ export async function verifySolution(fen, candidate, engine, lineScore, ply, del
             }
         }
 
-        if (lastMoves.length)
+        if (lastMoves.length){
+            lastMoves.push(solutionMove);
             break;
+        }
 
         board.makeMove(solutionMove);
     }
 
     if (lastMoves.length > 0){
-        if (candidate.length > 0){
-            lastMoves.push(candidate[candidate.length - 1]);
-            candidate[candidate.length - 1] = lastMoves;
+        // if there are too many lastMoves, then the user has a lot of options to
+        // maintain the winning line, and so the puzzle is over.
+        if (lastMoves.length >= 5){
+            // remove winner's move added at the end
+            solution.pop();
+            // remove loser's move added at the end
+            solution.pop();
         }else{
-            candidate.push(lastMoves);
+            if (solution.length > 0){
+                solution[solution.length - 1] = lastMoves;
+            }else{
+                solution.push(lastMoves);
+            }
         }
     }
 
-    return candidate;
+    return solution;
 }
 
 export function formatPuzzle(fen, puzzle, lineScore, stp){
