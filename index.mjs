@@ -1,5 +1,6 @@
 
 import fs from "fs";
+import pathModule from "path";
 import { cpus } from "os";
 
 import * as PGN_Handler from "./modules/pgn-file-reader.mjs";
@@ -10,40 +11,64 @@ import { config } from "./modules/config.mjs";
 import { TaskManager } from "./modules/task-manager.mjs";
 
 
-const bar = new ProgressBar("Processing games...");
+{
+    const puzzlePotential = openJSONFile(config["results-path"]);
+    const games = fetchGames();
 
-fs.readFile(config["games-path"], async (err, data) => {
-    if (err)
-        throw new Error(err);
-
-    log("BEGIN ANALYSIS");
-
-    data = data.toString();
-    const gamePGNs = PGN_Handler.splitPGNs(data);
-
-    // try to read from file first.
-    const puzzlePotential = fs.existsSync(config["results-path"]) ? JSON.parse(fs.readFileSync(config["results-path"]).toString()) : [];
+    const bar = new ProgressBar("Processing games...");
 
     const threads = 1; // cpus().length / 2
     const tm = new TaskManager("./modules/puzzle-generator.mjs", threads, { engineDir: "./engine" });
 
     let gamesProcessed = 0;
+    let totalGames = games.length;
 
-    for (const pgn of gamePGNs){
+    for (const pgn of games){
         tm.doTask(pgn)
             .then((puzzles) => {
                 gamesProcessed++;
-                bar.progress = gamesProcessed / gamePGNs.length;
+                bar.progress = gamesProcessed / totalGames;
+
+                // remove from games list
+                games.splice(games.indexOf(pgn), 1);
+                fs.writeFileSync("./data/games.json", JSON.stringify(games));
 
                 puzzlePotential.push(...puzzles);
                 fs.writeFileSync(config["results-path"], JSON.stringify(puzzlePotential));
 
-                if (gamesProcessed == gamePGNs.length)
+                if (gamesProcessed == totalGames)
                     tm.terminate();
             });
     }
-});
+}
 
+
+// reads the games directory, extracts all PGNs
+function fetchGames(){
+    // read in PGNs currently stored in games.json
+    const games = openJSONFile("./data/games.json");
+
+    const gamesPath = "./games";
+    const gamesScannedPath = "./games-scanned";
+
+    const dir = fs.readdirSync("./games");
+    for (const name of dir){
+        const path = pathModule.join(gamesPath, name);
+        if (name.endsWith(".pgn") && !fs.lstatSync(path).isDirectory()){
+            const pgns = PGN_Handler.splitPGNs(fs.readFileSync(path).toString());
+            for (const pgn of pgns){
+                games.push(pgn);
+            }
+            console.log(`Extracted ${pgns.length} games from ${name}`);
+            fs.renameSync(path, pathModule.join(gamesScannedPath, name));
+        }
+    }
+
+    // save games
+    fs.writeFileSync("./data/games.json", JSON.stringify(games));
+
+    return games;
+}
 
 function prepareCmdsFile(){
     let cmds = ``;
@@ -76,4 +101,8 @@ go movetime 10000
     }
     console.log(`Gathered ${p} positions`);
     fs.writeFileSync("./cmds.txt", cmds);
+}
+
+function openJSONFile(path){
+    return fs.existsSync(path) ? JSON.parse(fs.readFileSync(path).toString()) : [];
 }
