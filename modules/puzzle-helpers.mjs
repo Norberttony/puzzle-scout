@@ -1,8 +1,5 @@
 
-import { Move } from "./game/move.mjs";
-import { Board } from "./game/game.mjs";
-import { Piece } from "./game/piece.mjs";
-import { getMoveSAN } from "./game/san.mjs";
+import { Move, Board, Piece, getMoveSAN } from "hyper-chess-board";
 import { getEvaluation } from "./engine-helpers.mjs";
 import { log } from "./logger.mjs";
 import { getMovesFromPV } from "./engine-helpers.mjs";
@@ -75,7 +72,7 @@ export async function verifySolution(candidate, engine, ply, delta){
             // analyze this contesting move
             board.makeMove(move);
             engine.write(`position fen ${board.getFEN()}`);
-            const think = await getEvaluation(engine, ply);
+            const think = await getEvaluation(engine, ply, board.turn);
             board.unmakeMove(move);
 
             if (lineScore.isMate && think.score.isMate){

@@ -1,5 +1,5 @@
 
-import { Board } from "./game/game.mjs";
+import { Board, Piece } from "hyper-chess-board";
 
 
 export class Score {
@@ -19,7 +19,7 @@ export function extractFromInfoLine(line, name){
     return line.substring(leftSpace + 1, rightSpace);
 }
 
-export async function getEvaluation(engine, ply){
+export async function getEvaluation(engine, ply, stp){
     const startIdx = engine.log.length;
 
     await engine.prompt(`go depth ${ply}`, "bestmove", 1000000);
@@ -53,6 +53,8 @@ export async function getEvaluation(engine, ply){
                     val = parseInt(extractFromInfoLine(line, "score mate"));
                     score.isMate = true;
                 }
+                if (stp == Piece.black)
+                    val = -val;
                 score.value = val;
 
                 return { score, pv: currPV, log: tempLog };

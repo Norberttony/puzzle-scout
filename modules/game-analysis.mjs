@@ -1,6 +1,5 @@
 
-import { Board } from "./game/game.mjs";
-import { Piece } from "./game/piece.mjs";
+import { Board, Piece } from "hyper-chess-board";
 import { getEvaluation } from "./engine-helpers.mjs";
 
 
@@ -16,7 +15,7 @@ export async function analyzeGame(initialFEN, moves, engine, ply){
     
     // perform analysis of initial position
     {
-        const { score, pv, log } = await getEvaluation(engine, ply);
+        const { score, pv, log } = await getEvaluation(engine, ply, board.turn);
         analysis.push({ score, pv, fenBeforeMove: initialFEN, ply, log, color: board.turn });
     }
 
@@ -29,7 +28,7 @@ export async function analyzeGame(initialFEN, moves, engine, ply){
 
         engine.write(`position moves ${move.uci}`);
 
-        const { score, pv, log } = await getEvaluation(engine, ply);
+        const { score, pv, log } = await getEvaluation(engine, ply, board.turn);
         analysis.push({ score, pv, fenBeforeMove: fen, move, ply, log, color: board.turn });
     }
 

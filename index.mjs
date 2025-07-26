@@ -3,8 +3,8 @@ import fs from "fs";
 import pathModule from "path";
 import { cpus } from "os";
 
-import * as PGN_Handler from "./modules/pgn-file-reader.mjs";
-import { Board } from "./modules/game/game.mjs";
+import * as PGN_Handler from "hyper-chess-board/pgn";
+import { Board } from "hyper-chess-board";
 import { ProgressBar } from "./modules/progress-bar.mjs";
 import { config } from "./modules/config.mjs";
 import { TaskManager } from "./modules/task-manager.mjs";
@@ -21,6 +21,11 @@ import { TaskManager } from "./modules/task-manager.mjs";
 
     let gamesProcessed = 0;
     const totalGames = gameData.games.length;
+
+    if (totalGames == 0){
+        console.log("\nNo games left to analyze");
+        process.exit();
+    }
 
     for (const { pgn, id } of gameData.games){
         tm.doTask({ pgn, id })

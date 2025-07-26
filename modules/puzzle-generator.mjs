@@ -3,8 +3,8 @@ import { parentPort, workerData } from "worker_threads";
 import fs from "fs";
 
 import { log } from "./logger.mjs";
-import { Board } from "./game/game.mjs";
-import * as PGN_Handler from "./pgn-file-reader.mjs";
+import { Board } from "hyper-chess-board";
+import * as PGN_Handler from "hyper-chess-board/pgn";
 
 import { analyzeGame, findBlunders } from "./game-analysis.mjs";
 import { generatePuzzleCandidates, verifySolution, formatPuzzle } from "./puzzle-helpers.mjs";
