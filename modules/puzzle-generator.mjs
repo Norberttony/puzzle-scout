@@ -1,12 +1,13 @@
 
-import { parentPort, workerData } from "worker_threads";
-import fs from "fs";
+import { parentPort, workerData } from "node:worker_threads";
+import fs from "node:fs";
+import pathModule from "node:path";
 
 import { log } from "./logger.mjs";
 import { Board } from "hyper-chess-board";
 import * as PGN_Handler from "hyper-chess-board/pgn";
 
-import { analyzeGame, findBlunders } from "./game-analysis.mjs";
+import { findBlunders, Analysis } from "./game-analysis.mjs";
 import { generatePuzzleCandidates, verifySolution, formatPuzzle } from "./puzzle-helpers.mjs";
 
 import { config } from "./config.mjs";
@@ -36,6 +37,9 @@ async function prepareEngineProcess(engineWrapper){
 }
 
 async function generatePuzzles(pgn, gameId, engineWrapper){
+    const debugDir = pathModule.join(".", "debug");
+    const analysisPath = pathModule.join(debugDir, `${gameId}-analysis.json`);
+
     // prepare engine
     const engine = await prepareEngineProcess(engineWrapper);
 
@@ -49,18 +53,15 @@ async function generatePuzzles(pgn, gameId, engineWrapper){
     log("PGN Headers extracted");
     log(`Game identifier is ${headers.Site}`);
 
-    // extract all move objects to play on the board
-    const moves = extractMoveObjects(pgn);
-    log(`Total of ${moves.length} moves extracted`);
-
     // analyze each position
     log("Analyzing game...");
-    const analysis = await analyzeGame(board.getFEN(), moves, engine, shallowPly);
-    fs.writeFileSync(`./debug/${gameId}-analysis.json`, JSON.stringify(analysis));
+    const analysis = new Analysis(pgn, engine, analysisPath);
+    while (analysis.canAnalyze())
+        await analysis.once(1000);
 
     // identify blunders from analysis
     log("Searching for blunders...");
-    const blunders = findBlunders(analysis, blunderMag);
+    const blunders = findBlunders(analysis.getAnalysis(), blunderMag);
     log(`${blunders.length} blunders have been found.`);
     fs.writeFileSync(`./debug/${gameId}-blunders.json`, JSON.stringify(blunders));
 

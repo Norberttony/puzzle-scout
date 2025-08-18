@@ -2,7 +2,7 @@
 import fs from "node:fs";
 
 import { Board, Piece, StartingFEN } from "hyper-chess-board";
-import PGN_Handler from "hyper-chess-board/pgn";
+import * as PGN_Handler from "hyper-chess-board/pgn";
 import { getEvaluation } from "./engine-helpers.mjs";
 
 
@@ -35,13 +35,13 @@ export class Analysis {
         this.initialNSTP = board.turn == Piece.white ? Piece.black : Piece.white;
 
         // progress the board state based on analysis progress
-        for (let i = 0; i < analysis.length; i++)
+        for (let i = 0; i < this.analysis.length; i++)
             this.movesUCI.push(this.moves[i].uci);
     }
 
     // whether or not the game is yet to be fully analyzed
     canAnalyze(){
-        return this.analysis.length < this.movesUCI.length;
+        return this.analysis.length < this.moves.length;
     }
 
     // returns the analysis
@@ -51,7 +51,7 @@ export class Analysis {
 
     // performs an analysis of the current position
     async once(timeMs){
-        const movePlayed = this.movesUCI.push(this.moves[this.analysis.length].uci);
+        const movePlayed = this.moves[this.analysis.length].uci;
 
         // analyze...
         this.engineProc.write(`position fen ${this.fen} moves ${this.movesUCI.join(" ")}`);
@@ -65,6 +65,8 @@ export class Analysis {
         // add the move that was played
         analysis.movePlayed = movePlayed;
 
+        this.movesUCI.push(movePlayed);
+
         this.analysis.push(analysis);
         this.save();
     }
@@ -73,39 +75,6 @@ export class Analysis {
         fs.writeFileSync(this.filePath, JSON.stringify(this.analysis));
     }
 }
-
-// receives an initialFEN string, a list of Move objects, the engine process, and the ply to calculate to.
-// this function will use the engine to analyze every position that occurred in the game and return
-// a list of evaluations for each position in the form: { score, pv, fenBeforeMove, move, ply, log, color }
-export async function analyzeGame(initialFEN, moves, engine, ply){
-    const analysis = [];
-
-    const board = new Board();
-    board.loadFEN(initialFEN);
-    engine.write(`position fen ${initialFEN}`);
-    
-    // perform analysis of initial position
-    {
-        const { score, pv, log } = await getEvaluation(engine, ply, board.turn);
-        analysis.push({ score, pv, fenBeforeMove: initialFEN, ply, log, color: board.turn });
-    }
-
-    for (const move of moves){
-        let fen = board.getFEN();
-        board.makeMove(move);
-
-        if (board.isGameOver())
-            break;
-
-        engine.write(`position moves ${move.uci}`);
-
-        const { score, pv, log } = await getEvaluation(engine, ply, board.turn);
-        analysis.push({ score, pv, fenBeforeMove: fen, move, ply, log, color: board.turn });
-    }
-
-    return analysis;
-}
-
 
 // analysis returned from analyzeGame with a { score, pv, fenBeforeMove, move, ply, log, color } per position, excluding
 // the first position which does not have a move.

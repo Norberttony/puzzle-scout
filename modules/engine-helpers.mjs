@@ -52,10 +52,16 @@ export async function getEvaluation(engine, cmd, stp, timeoutMs){
             if (depth && parseInt(depth) >= curr.depth){
                 const score = new Score();
                 // extract either cp score or mate score.
-                let val = parseInt(extractFromInfoLine(line, "score cp"));
-                if (isNaN(val)){
-                    val = parseInt(extractFromInfoLine(line, "score mate"));
+                const cpScore = extractFromInfoLine(line, "score cp");
+                let val = parseInt(cpScore);
+                if (!cpScore || isNaN(val)){
+                    const mateScore = extractFromInfoLine(line, "score mate");
+                    val = parseInt(mateScore);
                     score.isMate = true;
+
+                    // if no score is provided, set as undefined.
+                    if (!mateScore)
+                        val = undefined;
                 }
                 if (stp == Piece.black)
                     val = -val;
@@ -65,7 +71,10 @@ export async function getEvaluation(engine, cmd, stp, timeoutMs){
                 if (pv != "")
                     curr.pv = pv;
 
-                curr.score = score;
+                // keep the latest score
+                if (val != undefined)
+                    curr.score = score;
+
                 curr.depth = depth;
                 curr.log = tempLog;
             }
