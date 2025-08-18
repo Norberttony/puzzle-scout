@@ -98,25 +98,3 @@ async function generatePuzzles(pgn, gameId, engineWrapper){
 
     return puzzles;
 }
-
-function extractMoveObjects(pgn){
-    const headers = PGN_Handler.extractHeaders(pgn);
-    const board = new Board();
-    
-    if (headers.FEN)
-        board.loadFEN(headers.FEN);
-
-    // extract all move objects to play on the board
-    const moveStrings = PGN_Handler.extractMoves(pgn);
-    const moves = [];
-    for (const m of moveStrings.split(" ")){
-        const move = board.getMoveOfSAN(m);
-        if (move){
-            moves.push(move);
-            board.makeMove(move);
-            move.san = m;
-        }
-    }
-
-    return moves;
-}

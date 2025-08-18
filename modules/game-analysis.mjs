@@ -1,7 +1,78 @@
 
-import { Board, Piece } from "hyper-chess-board";
+import fs from "node:fs";
+
+import { Board, Piece, StartingFEN } from "hyper-chess-board";
+import PGN_Handler from "hyper-chess-board/pgn";
 import { getEvaluation } from "./engine-helpers.mjs";
 
+
+// an object that handles the analysis of a game
+// if there is previous analysis data saved it must be fed as input into the constructor.
+export class Analysis {
+    constructor(pgn, engineProc, filePath){
+        this.pgn = pgn;
+        this.engineProc = engineProc;
+        this.filePath = filePath;
+        this.analysis = [];
+
+        // either zero-initializes OR, if the file exists, initializes with data from the file.
+        if (!fs.existsSync(filePath)){
+            fs.writeFileSync(filePath, "[]");
+            this.analysis = [];
+        }else{
+            this.analysis = JSON.parse(fs.readFileSync(filePath).toString());
+        }
+
+        // read from PGN
+        this.headers = PGN_Handler.extractHeaders(pgn);
+        this.moves = extractMoveObjects(pgn);
+        this.fen = this.headers.FEN || StartingFEN;
+        this.movesUCI = [];
+        
+        const board = new Board();
+        board.loadFEN(this.fen);
+        this.initialSTP = board.turn;
+        this.initialNSTP = board.turn == Piece.white ? Piece.black : Piece.white;
+
+        // progress the board state based on analysis progress
+        for (let i = 0; i < analysis.length; i++)
+            this.movesUCI.push(this.moves[i].uci);
+    }
+
+    // whether or not the game is yet to be fully analyzed
+    canAnalyze(){
+        return this.analysis.length < this.movesUCI.length;
+    }
+
+    // returns the analysis
+    getAnalysis(){
+        return this.analysis;
+    }
+
+    // performs an analysis of the current position
+    async once(timeMs){
+        const movePlayed = this.movesUCI.push(this.moves[this.analysis.length].uci);
+
+        // analyze...
+        this.engineProc.write(`position fen ${this.fen} moves ${this.movesUCI.join(" ")}`);
+        const analysis = await getEvaluation(
+            this.engineProc,
+            `go movetime ${timeMs}`,
+            this.movesUCI.length % 2 ? this.initialNSTP : this.initialSTP,
+            timeMs + 400
+        );
+        
+        // add the move that was played
+        analysis.movePlayed = movePlayed;
+
+        this.analysis.push(analysis);
+        this.save();
+    }
+
+    save(){
+        fs.writeFileSync(this.filePath, JSON.stringify(this.analysis));
+    }
+}
 
 // receives an initialFEN string, a list of Move objects, the engine process, and the ply to calculate to.
 // this function will use the engine to analyze every position that occurred in the game and return
@@ -85,4 +156,26 @@ export function findBlunders(analysis, blunderMag){
     }
     
     return blunders;
+}
+
+function extractMoveObjects(pgn){
+    const headers = PGN_Handler.extractHeaders(pgn);
+    const board = new Board();
+    
+    if (headers.FEN)
+        board.loadFEN(headers.FEN);
+
+    // extract all move objects to play on the board
+    const moveStrings = PGN_Handler.extractMoves(pgn);
+    const moves = [];
+    for (const m of moveStrings.split(" ")){
+        const move = board.getMoveOfSAN(m);
+        if (move){
+            moves.push(move);
+            board.makeMove(move);
+            move.san = m;
+        }
+    }
+
+    return moves;
 }
