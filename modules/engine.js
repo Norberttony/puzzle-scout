@@ -1,8 +1,8 @@
 
-import fs from "fs";
-import pathModule from "path";
+import fs from "node:fs";
+import pathModule from "node:path";
 
-import { EngineProcess } from "./engine-process.mjs";
+import { EngineProcess } from "./engine-process.js";
 
 
 export class Engine {

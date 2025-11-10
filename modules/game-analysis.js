@@ -3,7 +3,7 @@ import fs from "node:fs";
 
 import { Board, Piece, StartingFEN } from "hyper-chess-board";
 import * as PGN_Handler from "hyper-chess-board/pgn";
-import { getEvaluation } from "./engine-helpers.mjs";
+import { getEvaluation } from "./engine-helpers.js";
 
 
 // an object that handles the analysis of a game

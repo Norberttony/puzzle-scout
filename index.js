@@ -1,13 +1,13 @@
 
-import fs from "fs";
-import pathModule from "path";
-import { cpus } from "os";
+import fs from "node:fs";
+import pathModule from "node:path";
+import { cpus } from "node:os";
 
 import * as PGN_Handler from "hyper-chess-board/pgn";
 import { Board } from "hyper-chess-board";
-import { ProgressBar } from "./modules/progress-bar.mjs";
-import { config } from "./modules/config.mjs";
-import { TaskManager } from "./modules/task-manager.mjs";
+import { ProgressBar } from "./modules/progress-bar.js";
+import { config } from "./modules/config.js";
+import { TaskManager } from "./modules/task-manager.js";
 
 
 {
@@ -17,7 +17,7 @@ import { TaskManager } from "./modules/task-manager.mjs";
     const bar = new ProgressBar("Processing games...");
 
     const threads = 1; // cpus().length / 2
-    const tm = new TaskManager("./modules/puzzle-generator.mjs", threads, { engineDir: "./engine" });
+    const tm = new TaskManager("./modules/puzzle-generator.js", threads, { engineDir: "./engine" });
 
     let gamesProcessed = 0;
     const totalGames = gameData.games.length;

@@ -1,8 +1,8 @@
 
 import { Move, Board, Piece, getMoveSAN } from "hyper-chess-board";
-import { getEvaluation } from "./engine-helpers.mjs";
-import { log } from "./logger.mjs";
-import { getMovesFromPV } from "./engine-helpers.mjs";
+import { getEvaluation } from "./engine-helpers.js";
+import { log } from "./logger.js";
+import { getMovesFromPV } from "./engine-helpers.js";
 
 
 // takes in a list of blunders (from findBlunders) and returns a list of puzzle candidates,

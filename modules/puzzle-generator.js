@@ -3,15 +3,15 @@ import { parentPort, workerData } from "node:worker_threads";
 import fs from "node:fs";
 import pathModule from "node:path";
 
-import { log } from "./logger.mjs";
+import { log } from "./logger.js";
 import { Board } from "hyper-chess-board";
 import * as PGN_Handler from "hyper-chess-board/pgn";
 
-import { findBlunders, Analysis } from "./game-analysis.mjs";
-import { generatePuzzleCandidates, verifySolution, formatPuzzle } from "./puzzle-helpers.mjs";
+import { findBlunders, Analysis } from "./game-analysis.js";
+import { generatePuzzleCandidates, verifySolution, formatPuzzle } from "./puzzle-helpers.js";
 
-import { config } from "./config.mjs";
-import { extractEngines } from "./engine.mjs";
+import { config } from "./config.js";
+import { extractEngines } from "./engine.js";
 
 
 const shallowPly = config["shallow-search-depth-ply"];
