@@ -1,11 +1,14 @@
 
 import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+import { isExecutable } from "./utils.js";
 
 
 export class EngineProcess {
-    constructor(engine, onReadLine = () => 0){
-        this.engine = engine;
-        this.proc = spawn(this.engine.path);
+    constructor(path, onReadLine = () => 0){
+        this.proc = spawn(path);
 
         this.onReadLine = onReadLine;
 
@@ -83,4 +86,9 @@ export class EngineProcess {
             this.proc.stdin.write(msg);
         }
     }
+}
+
+// extracts engines from a directory.
+export async function extractEngines(dir){
+    return (await fs.readdir(dir)).map(name => path.join(dir, name)).filter(isExecutable);
 }
