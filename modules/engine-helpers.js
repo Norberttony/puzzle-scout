@@ -1,5 +1,6 @@
 
 import { Board, Piece } from "hyper-chess-board";
+import { log } from "./logger.js";
 
 
 export class Score {
@@ -51,28 +52,34 @@ export async function getEvaluation(engine, cmd, stp, timeoutMs){
             const depth = extractFromInfoLine(line, "depth");
             if (depth && parseInt(depth) >= curr.depth){
                 const score = new Score();
-                // extract either cp score or mate score.
+                // extract either cp score, mate score, or empty score.
                 const cpScore = extractFromInfoLine(line, "score cp");
-                let val = parseInt(cpScore);
-                if (!cpScore || isNaN(val)){
-                    const mateScore = extractFromInfoLine(line, "score mate");
-                    val = parseInt(mateScore);
-                    score.isMate = true;
+                const mateScore = extractFromInfoLine(line, "score mate");
+                const emptyScore = extractFromInfoLine(line, "score (--)");
 
-                    // if no score is provided, set as undefined.
-                    if (!mateScore)
-                        val = undefined;
+                if (cpScore){
+                    score.value = parseInt(cpScore);
+                    score.isMate = false;
+                }else if (mateScore){
+                    score.value = parseInt(mateScore);
+                    score.isMate = true;
+                }else if (emptyScore){
+                    score.value = undefined;
+                    score.isMate = undefined;
+                }else{
+                    const msg = `Warning: could not find score from info line ${line}`;
+                    log(msg);
+                    console.warn(msg);
                 }
-                if (stp == Piece.black)
-                    val = -val;
-                score.value = val;
+                if (score.value && stp == Piece.black)
+                    score.value = -score.value;
 
                 // avoid writing in empty PV lines
                 if (pv != "")
                     curr.pv = pv;
 
                 // keep the latest score
-                if (val != undefined)
+                if (score.value != undefined && score.isMate != undefined)
                     curr.score = score;
 
                 curr.depth = depth;
