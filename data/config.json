@@ -3,14 +3,16 @@
     "results-path": "./data/results.json",
     "debug-path": "./data/debug.txt",
     
-    "shallow-search-depth-ply": 5,
-    "confirm-search-additional-ply": 3,
-    "blunder-magnitude": 700,
+    "shallow-search-depth-ply": 6,
+    "confirm-search-additional-ply": 1,
+    "blunder-magnitude": 500,
     "winner-max": 200,
     "max-solutions": 2,
+    "analysis-think-time": 60000,
 
     "verify-path": "./data/puzzles.json",
     "verify-report-path": "./data/verify.json",
-    "verify-search-ply": 6,
-    "verify-mistake-mag": 500
+    "verify-search-ply": 8,
+    "verify-mistake-mag": 500,
+    "verify-think-time": 120000
 }

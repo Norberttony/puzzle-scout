@@ -15,13 +15,20 @@ export function generatePuzzleCandidates(blunders, winnerMax){
         if (blunder.horizonEffect)
             continue;
 
+        const beforeValue = blunder.beforeScore.value;
+        const afterValue = blunder.afterScore.value;
+
         // the blunder should flip the script for the previously winning side, and if it does
         // not, then it is not a good puzzle.
-        if (Math.sign(blunder.beforeScore) == Math.sign(blunder.afterScore) && Math.abs(blunder.beforeScore) > winnerMax)
+        if (Math.sign(beforeValue) == Math.sign(afterValue) && Math.abs(beforeValue) > winnerMax)
             continue;
 
         // the blunder should result in a relatively winning position for one of the players...
-        if (!blunder.afterScore.isMate && Math.abs(blunder.afterScore.value) < 600)
+        if (!blunder.afterScore.isMate && Math.abs(afterValue) < 600)
+            continue;
+
+        // the blunder should not be missing mate when already winning
+        if (blunder.beforeScore.isMate)
             continue;
 
         const candidate = {
@@ -37,10 +44,10 @@ export function generatePuzzleCandidates(blunders, winnerMax){
     return candidates;
 }
 
-export async function verifySolution(candidate, engine, ply, delta){
+export async function verifySolution(candidate, engine, timeMs, delta){
     const board = new Board();
     board.loadFEN(candidate.fenBeforeMistake);
-    board.makeMove(candidate.leadingMistake);
+    board.makeMove(board.getMoveOfLAN(candidate.leadingMistake));
 
     const lineScore = candidate.scoreAfterMistake;
 
@@ -72,7 +79,7 @@ export async function verifySolution(candidate, engine, ply, delta){
             // analyze this contesting move
             board.makeMove(move);
             engine.write(`position fen ${board.getFEN()}`);
-            const think = await getEvaluation(engine, ply, board.turn);
+            const think = await getEvaluation(engine, `go movetime ${timeMs}`, board.turn, 9999999);
             board.unmakeMove(move);
 
             if (lineScore.isMate && think.score.isMate){

@@ -76,24 +76,29 @@ export class Analysis {
     }
 }
 
-// analysis returned from analyzeGame with a { score, pv, fenBeforeMove, move, ply, log, color } per position, excluding
-// the first position which does not have a move.
+// analysis is an instance of Analysis class, blunderMag indicates the amount of evaluation swing
+// necessary for a move to be considered a mistake.
 // returns a list of { badMove, beforeScore, afterScore, fenBeforeBadMove, expectedPV, punishPV, horizonEffect }
-export function findBlunders(analysis, blunderMag){
+export function findBlunders(fen, analysis, blunderMag){
+    const board = new Board();
+    board.loadFEN(fen);
+
     const blunders = [];
 
     let prevThink = analysis[0];
     for (let i = 1; i < analysis.length; i++){
         const thisThink = analysis[i];
         const blunder = {
-            badMove: thisThink.move,
+            badMove: prevThink.movePlayed,
             beforeScore: prevThink.score,
             afterScore: thisThink.score,
-            fenBeforeBadMove: thisThink.fenBeforeMove,
+            fenBeforeBadMove: board.getFEN(),
             expectedPV: prevThink.pv,
             punishPV: thisThink.pv,
             horizonEffect: false
         };
+
+        board.makeMove(board.getMoveOfLAN(prevThink.movePlayed));
 
         if (thisThink.score.isMate && prevThink.score.isMate){
             // user played a move such that it takes longer to force a win

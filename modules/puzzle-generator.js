@@ -57,11 +57,11 @@ async function generatePuzzles(pgn, gameId, enginePath){
     log("Analyzing game...");
     const analysis = new Analysis(pgn, engine, analysisPath);
     while (analysis.canAnalyze())
-        await analysis.once(1000);
+        await analysis.once(config["analysis-think-time"]);
 
     // identify blunders from analysis
     log("Searching for blunders...");
-    const blunders = findBlunders(analysis.getAnalysis(), blunderMag);
+    const blunders = findBlunders(analysis.fen, analysis.getAnalysis(), blunderMag);
     log(`${blunders.length} blunders have been found.`);
     fs.writeFileSync(`./debug/${gameId}-blunders.json`, JSON.stringify(blunders));
 
@@ -72,12 +72,13 @@ async function generatePuzzles(pgn, gameId, enginePath){
     const puzzles = [];
     for (const candidate of candidates){
         board.loadFEN(candidate.fenBeforeMistake);
-        board.makeMove(candidate.leadingMistake);
+        const move = board.getMoveOfLAN(candidate.leadingMistake);
+        board.makeMove(move);
         const afterBlunderFEN = board.getFEN();
 
         log(`Verifying candidate: ${JSON.stringify(candidate)}`);
 
-        const puzzle = await verifySolution(candidate, engine, config["verify-search-ply"], config["verify-delta"]);
+        const puzzle = await verifySolution(candidate, engine, config["verify-think-time"], config["verify-delta"]);
 
         log(`After verification: ${JSON.stringify(puzzle)}`);
 
